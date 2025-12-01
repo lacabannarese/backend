@@ -1,0 +1,39 @@
+{
+  "name": "redrecetas",
+  "version": "2.0.0",
+  "description": "Backend para La Cabana - RedRecetas con integracimn de tienda y Stripe",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "seed": "node scripts/seedProductos.js",
+    "seed:all": "npm run seed && echo 'Productos inicializados'",
+    "test": "echo \"No tests yet\" && exit 0"
+  },
+  "keywords": [
+    "recetas",
+    "tienda",
+    "stripe",
+    "mongodb",
+    "express"
+  ],
+  "author": "La Cabana Team",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "mongoose": "^7.6.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "stripe": "^13.10.0",
+    "multer": "^1.4.5-lts.1",
+    "bcrypt": "^5.1.1",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=14.0.0",
+    "npm": ">=6.0.0"
+  }
+}
