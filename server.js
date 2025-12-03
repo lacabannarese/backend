@@ -23,7 +23,8 @@ const corsOptions = {
     const allowedOrigins = [
       'http://localhost:8080',
       'http://localhost:3000',
-      'https://tu-dominio.hostinger.com', // ⭐ Reemplaza con tu dominio real de Hostinger
+      'https://lacabannarese.github.io', // ✅ TU DOMINIO DE GITHUB PAGES
+      'https://tu-dominio.hostinger.com',
       'https://srv-d4mvel3uibrs738udv7g.onrender.com',
       /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$/,
       /^http:\/\/10\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$/,
@@ -53,9 +54,41 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(logger);
 
-// Servir archivos estáticos y uploads
+// ✅ MIDDLEWARE GLOBAL PARA HEADERS DE SEGURIDAD
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
+  next();
+});
+
+// ✅ SERVIR ARCHIVOS ESTÁTICOS CON HEADERS CORS CORRECTOS
 app.use(express.static('public'));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// ✅ CONFIGURACIÓN ESPECÍFICA PARA /uploads CON HEADERS CORS
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+  setHeaders: (res, filePath) => {
+    // Headers CORS para permitir carga de imágenes desde cualquier origen
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.set('Cache-Control', 'public, max-age=31536000'); // Cache de 1 año
+    
+    // Determinar Content-Type basado en la extensión
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeTypes = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.svg': 'image/svg+xml'
+    };
+    
+    if (mimeTypes[ext]) {
+      res.set('Content-Type', mimeTypes[ext]);
+    }
+  }
+}));
 
 // Endpoint raíz
 app.get('/', (req, res) => {
@@ -100,8 +133,8 @@ app.post('/crear-sesion-pago', async (req, res) => {
         quantity: cantidad,
       }],
       mode: 'payment',
-      success_url: `${process.env.FRONTEND_URL || 'https://tu-dominio.hostinger.com'}/exito.html?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.FRONTEND_URL || 'https://tu-dominio.hostinger.com'}/tienda.html?canceled=true`,
+      success_url: `${process.env.FRONTEND_URL || 'https://lacabannarese.github.io/frontend'}/exito.html?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.FRONTEND_URL || 'https://lacabannarese.github.io/frontend'}/tienda.html?canceled=true`,
       billing_address_collection: 'required',
       shipping_address_collection: {
         allowed_countries: ['MX'],
@@ -149,6 +182,19 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// ✅ ENDPOINT DE PRUEBA PARA IMÁGENES
+app.get('/test-image', (req, res) => {
+  res.json({
+    message: 'Servicio de imágenes funcionando',
+    uploadsPath: path.join(__dirname, 'uploads'),
+    cors: 'enabled',
+    allowedOrigins: [
+      'https://lacabannarese.github.io',
+      'http://localhost:8080'
+    ]
+  });
+});
+
 // Manejo de errores
 app.use(errorHandler);
 
@@ -156,8 +202,10 @@ app.use(errorHandler);
 app.listen(port, '0.0.0.0', () => {
   console.log(`🚀 Servidor corriendo en puerto ${port}`);
   console.log(`📡 API disponible en /api`);
+  console.log(`🖼️  Imágenes disponibles en /uploads`);
   console.log(`🌍 Render Service: srv-d4mvel3uibrs738udv7g`);
   console.log(`✅ Entorno: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔐 CORS habilitado para: https://lacabannarese.github.io`);
 });
 
 const mongoose = require('mongoose');
