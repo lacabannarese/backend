@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs'); // ✅ AGREGADO para diagnóstico
 const stripe = require('stripe')('sk_test_51SX1KLQadAnOUAEUK3rhGsScgJth90j1U7Ho8qNXGB1tEUYXn9Al39eJRYfrxji7m6VFpUp7hW6CJjOcAddRauCT00bJySZ2c4');
 require('dotenv').config();
 
@@ -23,7 +24,7 @@ const corsOptions = {
     const allowedOrigins = [
       'http://localhost:8080',
       'http://localhost:3000',
-      'https://lacabannarese.github.io', // ✅ TU DOMINIO DE GITHUB PAGES
+      'https://lacabannarese.github.io',
       'https://snow-viper-512277.hostingersite.com',
       'https://srv-d4mvel3uibrs738udv7g.onrender.com',
       /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$/,
@@ -42,7 +43,7 @@ const corsOptions = {
       callback(null, true);
     } else {
       console.log('⚠️ CORS bloqueado para:', origin);
-      callback(null, true); // En desarrollo permitir todo
+      callback(null, true);
     }
   },
   credentials: true,
@@ -68,12 +69,10 @@ app.use(express.static('public'));
 // ✅ CONFIGURACIÓN ESPECÍFICA PARA /uploads CON HEADERS CORS
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
   setHeaders: (res, filePath) => {
-    // Headers CORS para permitir carga de imágenes desde cualquier origen
     res.set('Access-Control-Allow-Origin', '*');
     res.set('Cross-Origin-Resource-Policy', 'cross-origin');
-    res.set('Cache-Control', 'public, max-age=31536000'); // Cache de 1 año
+    res.set('Cache-Control', 'public, max-age=31536000');
     
-    // Determinar Content-Type basado en la extensión
     const ext = path.extname(filePath).toLowerCase();
     const mimeTypes = {
       '.jpg': 'image/jpeg',
@@ -104,7 +103,125 @@ app.get('/', (req, res) => {
   });
 });
 
-// Rutas de la API
+// ========================================
+// ✅ ENDPOINTS DE DIAGNÓSTICO DE IMÁGENES
+// ========================================
+
+// 🔍 Verificar qué archivos existen en /uploads
+app.get('/api/check-uploads', (req, res) => {
+  const uploadsPath = path.join(__dirname, 'uploads');
+  
+  try {
+    if (!fs.existsSync(uploadsPath)) {
+      return res.json({ 
+        exists: false, 
+        message: '❌ La carpeta uploads no existe',
+        path: uploadsPath,
+        advertencia: '⚠️ Render usa almacenamiento efímero. Los archivos se eliminan al reiniciar.'
+      });
+    }
+    
+    const files = fs.readdirSync(uploadsPath);
+    
+    const filesDetails = files.map(file => {
+      const filePath = path.join(uploadsPath, file);
+      const stats = fs.statSync(filePath);
+      return {
+        nombre: file,
+        tamaño: `${(stats.size / 1024).toFixed(2)} KB`,
+        fecha: stats.mtime,
+        url: `/uploads/${file}`
+      };
+    });
+    
+    res.json({ 
+      exists: true,
+      carpeta: uploadsPath,
+      totalArchivos: files.length,
+      archivos: filesDetails,
+      mensaje: files.length === 0 
+        ? '⚠️ La carpeta existe pero está VACÍA (las imágenes fueron borradas)' 
+        : `✅ ${files.length} archivos encontrados`,
+      advertencia: '⚠️ Render elimina archivos al reiniciar. Soluciones: Cloudinary (gratis) o Render Disk ($7/mes)'
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      error: error.message,
+      stack: error.stack 
+    });
+  }
+});
+
+// 🔍 Verificar una imagen específica
+app.get('/api/check-image/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const imagePath = path.join(__dirname, 'uploads', filename);
+  
+  if (fs.existsSync(imagePath)) {
+    const stats = fs.statSync(imagePath);
+    res.json({
+      existe: true,
+      nombre: filename,
+      ruta: imagePath,
+      tamaño: `${(stats.size / 1024).toFixed(2)} KB`,
+      fecha: stats.mtime,
+      url: `/uploads/${filename}`,
+      mensaje: '✅ La imagen existe en el servidor'
+    });
+  } else {
+    res.status(404).json({
+      existe: false,
+      nombre: filename,
+      ruta: imagePath,
+      mensaje: '❌ La imagen NO existe en el servidor',
+      explicacion: 'Probablemente fue eliminada cuando Render reinició el servicio',
+      soluciones: [
+        '1. Volver a subir la receta con la imagen',
+        '2. Usar Cloudinary (almacenamiento permanente gratis)',
+        '3. Pagar Render Disk ($7/mes)'
+      ]
+    });
+  }
+});
+
+// 🔍 Info del sistema de archivos
+app.get('/api/system-info', (req, res) => {
+  const uploadsPath = path.join(__dirname, 'uploads');
+  
+  res.json({
+    servidor: 'Render.com',
+    entorno: process.env.NODE_ENV || 'development',
+    directorio_trabajo: process.cwd(),
+    ruta_uploads: uploadsPath,
+    carpeta_uploads_existe: fs.existsSync(uploadsPath),
+    advertencia: '⚠️ Render usa almacenamiento EFÍMERO',
+    explicacion: 'Los archivos en /uploads se ELIMINAN cuando el servicio se reinicia o redeploy',
+    soluciones_recomendadas: {
+      opcion1: {
+        nombre: 'Cloudinary (Recomendado)',
+        costo: 'GRATIS hasta 25 GB',
+        permanente: true,
+        cdn: true
+      },
+      opcion2: {
+        nombre: 'Render Disk',
+        costo: '$7/mes',
+        permanente: true,
+        cdn: false
+      },
+      opcion3: {
+        nombre: 'Mover a Hostinger',
+        costo: 'Incluido en plan Business',
+        permanente: true,
+        cdn: false
+      }
+    }
+  });
+});
+
+// ========================================
+// RUTAS DE LA API
+// ========================================
 app.use('/api/usuarios', require('./routes/usuarios'));
 app.use('/api/recetas', require('./routes/recetas'));
 app.use('/api/valoraciones', require('./routes/valoraciones'));
@@ -133,8 +250,8 @@ app.post('/crear-sesion-pago', async (req, res) => {
         quantity: cantidad,
       }],
       mode: 'payment',
-      success_url: `${process.env.FRONTEND_URL || 'https://lacabannarese.github.io/frontend'}/exito.html?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.FRONTEND_URL || 'https://lacabannarese.github.io/frontend'}/tienda.html?canceled=true`,
+      success_url: `${process.env.FRONTEND_URL || 'https://snow-viper-512277.hostingersite.com'}/exito.html?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.FRONTEND_URL || 'https://snow-viper-512277.hostingersite.com'}/tienda.html?canceled=true`,
       billing_address_collection: 'required',
       shipping_address_collection: {
         allowed_countries: ['MX'],
@@ -182,7 +299,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// ✅ ENDPOINT DE PRUEBA PARA IMÁGENES
+// Endpoint de prueba para imágenes
 app.get('/test-image', (req, res) => {
   res.json({
     message: 'Servicio de imágenes funcionando',
@@ -190,6 +307,7 @@ app.get('/test-image', (req, res) => {
     cors: 'enabled',
     allowedOrigins: [
       'https://lacabannarese.github.io',
+      'https://snow-viper-512277.hostingersite.com',
       'http://localhost:8080'
     ]
   });
@@ -203,9 +321,10 @@ app.listen(port, '0.0.0.0', () => {
   console.log(`🚀 Servidor corriendo en puerto ${port}`);
   console.log(`📡 API disponible en /api`);
   console.log(`🖼️  Imágenes disponibles en /uploads`);
+  console.log(`🔍 Diagnóstico en /api/check-uploads`);
   console.log(`🌍 Render Service: srv-d4mvel3uibrs738udv7g`);
   console.log(`✅ Entorno: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔐 CORS habilitado para: https://lacabannarese.github.io`);
+  console.log(`🔐 CORS habilitado para múltiples dominios`);
 });
 
 const mongoose = require('mongoose');
