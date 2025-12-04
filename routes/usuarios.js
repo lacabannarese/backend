@@ -6,27 +6,28 @@ const Receta = require('../models/Receta');
 const BlogConsejo = require('../models/BlogConsejo');
 const Valoracion = require('../models/Valoracion');
 const ComentarioBlog = require('../models/ComentarioBlog');
-const upload = require('../middleware/multerConfig');
-const path = require('path');
-const fs = require('fs');
-
-const uploadsDir = path.join(__dirname, '../uploads');
+const { uploadPerfil } = require('../middleware/multerCloudinary');
+const { eliminarImagen } = require('../config/cloudinary');
 
 // Crear usuario
-router.post('/', upload.single('imagenPerfil'), async (req, res) => {
+router.post('/', uploadPerfil.single('imagenPerfil'), async (req, res) => {
   try {
     const userData = {
       nombreUsuario: req.body.nombreUsuario,
       correoElectronico: req.body.correoElectronico,
       contrasena: req.body.contrasena
     };
+    
+    // Si se subió imagen, guardar datos de Cloudinary
     if (req.file) {
       userData.imagenPerfil = {
         nombreArchivo: req.file.filename,
         tipo: req.file.mimetype,
-        almacenadoEn: `/uploads/${req.file.filename}`
+        almacenadoEn: req.file.path, // URL completa de Cloudinary
+        cloudinaryId: req.file.filename // ID para eliminar después
       };
     }
+    
     const usuario = new Usuario(userData);
     await usuario.save();
     res.json(usuario);
@@ -49,7 +50,7 @@ router.get('/', async (req, res) => {
 router.get('/:usuario', async (req, res) => {
   try {
     const usuario = await Usuario.findOne({ nombreUsuario: req.params.usuario })
-      .populate("favoritos"); // 👈 importante
+      .populate("favoritos");
 
     if (!usuario) {
       return res.status(404).json({ error: "Usuario no encontrado" });
@@ -61,33 +62,40 @@ router.get('/:usuario', async (req, res) => {
   }
 });
 
-
 // Actualizar usuario
-router.put('/:nombreUsuario', upload.single('imagenPerfil'), async (req, res) => {
+router.put('/:nombreUsuario', uploadPerfil.single('imagenPerfil'), async (req, res) => {
   try {
     const updateData = { ...req.body };
+    
+    // Si se subió nueva imagen
     if (req.file) {
+      // Obtener usuario actual para eliminar imagen antigua
+      const usuarioAnterior = await Usuario.findOne({ nombreUsuario: req.params.nombreUsuario });
+      
+      // Eliminar imagen antigua de Cloudinary
+      if (usuarioAnterior?.imagenPerfil?.almacenadoEn) {
+        await eliminarImagen(usuarioAnterior.imagenPerfil.almacenadoEn);
+      }
+      
+      // Guardar nueva imagen
       updateData.imagenPerfil = {
         nombreArchivo: req.file.filename,
         tipo: req.file.mimetype,
-        almacenadoEn: `/uploads/${req.file.filename}`
+        almacenadoEn: req.file.path,
+        cloudinaryId: req.file.filename
       };
-      const usuarioAnterior = await Usuario.findOne({ nombreUsuario: req.params.nombreUsuario });
-      if (usuarioAnterior?.imagenPerfil?.nombreArchivo) {
-        const oldImagePath = path.join(uploadsDir, usuarioAnterior.imagenPerfil.nombreArchivo);
-        if (fs.existsSync(oldImagePath)) {
-          fs.unlinkSync(oldImagePath);
-        }
-      }
     }
+    
     const usuario = await Usuario.findOneAndUpdate(
       { nombreUsuario: req.params.nombreUsuario },
       updateData,
       { new: true }
     );
+    
     if (!usuario) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
+    
     res.json(usuario);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -95,9 +103,9 @@ router.put('/:nombreUsuario', upload.single('imagenPerfil'), async (req, res) =>
 });
 
 // Actualizar usuario con referencias
-router.put('/:nombreUsuario/actualizar', upload.single('imagenPerfil'), async (req, res) => {
+router.put('/:nombreUsuario/actualizar', uploadPerfil.single('imagenPerfil'), async (req, res) => {
   console.log('\n========================================');
-  console.log('🔍 [PUT /actualizar] Usuario:', req.params.nombreUsuario);
+  console.log('📝 [PUT /actualizar] Usuario:', req.params.nombreUsuario);
   console.log('========================================');
   
   try {
@@ -112,6 +120,7 @@ router.put('/:nombreUsuario/actualizar', upload.single('imagenPerfil'), async (r
     const cambios = { recetas: 0, blogs: 0, valoraciones: 0, comentarios: 0 };
     let nombreUsuarioNuevo = nombreUsuarioActual;
     
+    // Cambio de nombre de usuario
     if (req.body.nuevoNombreUsuario && req.body.nuevoNombreUsuario !== nombreUsuarioActual) {
       nombreUsuarioNuevo = req.body.nuevoNombreUsuario;
       const usuarioExistente = await Usuario.findOne({ nombreUsuario: nombreUsuarioNuevo });
@@ -121,6 +130,7 @@ router.put('/:nombreUsuario/actualizar', upload.single('imagenPerfil'), async (r
       updateData.nombreUsuario = nombreUsuarioNuevo;
       console.log('✏️ Cambio de nombre:', nombreUsuarioActual, '→', nombreUsuarioNuevo);
       
+      // Actualizar referencias
       if (req.body.actualizarReferencias === 'true') {
         console.log('🔄 Actualizando referencias...');
         const recetas = await Receta.updateMany(
@@ -151,31 +161,33 @@ router.put('/:nombreUsuario/actualizar', upload.single('imagenPerfil'), async (r
       }
     }
     
+    // Actualizar email
     if (req.body.correoElectronico) {
       updateData.correoElectronico = req.body.correoElectronico;
       console.log('📧 Nuevo email:', req.body.correoElectronico);
     }
     
+    // Actualizar contraseña
     if (req.body.contrasena) {
       updateData.contrasena = req.body.contrasena;
       console.log('🔒 Contraseña actualizada');
     }
     
+    // Actualizar imagen de perfil
     if (req.file) {
+      // Eliminar imagen antigua de Cloudinary
+      if (usuario.imagenPerfil?.almacenadoEn) {
+        await eliminarImagen(usuario.imagenPerfil.almacenadoEn);
+        console.log('🗑️ Imagen anterior eliminada de Cloudinary');
+      }
+      
       updateData.imagenPerfil = {
         nombreArchivo: req.file.filename,
         tipo: req.file.mimetype,
-        almacenadoEn: `/uploads/${req.file.filename}`
+        almacenadoEn: req.file.path,
+        cloudinaryId: req.file.filename
       };
-      console.log('🖼️ Nueva imagen:', updateData.imagenPerfil.almacenadoEn);
-      
-      if (usuario.imagenPerfil?.nombreArchivo) {
-        const oldImagePath = path.join(uploadsDir, usuario.imagenPerfil.nombreArchivo);
-        if (fs.existsSync(oldImagePath)) {
-          fs.unlinkSync(oldImagePath);
-          console.log('🗑️ Imagen anterior eliminada');
-        }
-      }
+      console.log('🖼️ Nueva imagen en Cloudinary:', req.file.path);
     }
     
     const usuarioActualizado = await Usuario.findOneAndUpdate(
@@ -212,10 +224,10 @@ router.put('/:nombreUsuario/actualizar', upload.single('imagenPerfil'), async (r
   }
 });
 
-// Agregar favorito (CORREGIDO)
+// Agregar favorito
 router.post('/:usuario/favoritos/:idReceta', async (req, res) => {
   try {
-    const recetaId = new mongoose.Types.ObjectId(req.params.idReceta); // 👈 usar 'new'
+    const recetaId = new mongoose.Types.ObjectId(req.params.idReceta);
     const usuario = await Usuario.findOneAndUpdate(
       { nombreUsuario: req.params.usuario },
       { $addToSet: { favoritos: recetaId } },
@@ -233,10 +245,10 @@ router.post('/:usuario/favoritos/:idReceta', async (req, res) => {
   }
 });
 
-// Eliminar favorito (CORREGIDO)
+// Eliminar favorito
 router.delete('/:usuario/favoritos/:idReceta', async (req, res) => {
   try {
-    const recetaId = new mongoose.Types.ObjectId(req.params.idReceta); // 👈 usar 'new'
+    const recetaId = new mongoose.Types.ObjectId(req.params.idReceta);
     const usuario = await Usuario.findOneAndUpdate(
       { nombreUsuario: req.params.usuario },
       { $pull: { favoritos: recetaId } },
