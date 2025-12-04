@@ -24,7 +24,7 @@ const corsOptions = {
       'http://localhost:8080',
       'http://localhost:3000',
       'https://lacabannarese.github.io', // ✅ TU DOMINIO DE GITHUB PAGES
-      'https://tu-dominio.hostinger.com',
+      'https://snow-viper-512277.hostingersite.com',
       'https://srv-d4mvel3uibrs738udv7g.onrender.com',
       /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$/,
       /^http:\/\/10\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$/,
