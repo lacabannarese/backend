@@ -283,4 +283,25 @@ router.get('/:usuario/favoritos', async (req, res) => {
   }
 });
 
+// Eliminar usuario
+router.delete('/:nombreUsuario', async (req, res) => {
+  try {
+    const usuario = await Usuario.findOneAndDelete({ nombreUsuario: req.params.nombreUsuario });
+
+    if (!usuario) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    // Si tenía imagen en Cloudinary, eliminarla
+    if (usuario.imagenPerfil?.almacenadoEn) {
+      await eliminarImagen(usuario.imagenPerfil.almacenadoEn);
+    }
+
+    res.json({ mensaje: 'Usuario eliminado exitosamente' });
+  } catch (err) {
+    console.error('❌ Error al eliminar usuario:', err);
+    res.status(500).json({ error: 'Error al eliminar usuario', detalles: err.message });
+  }
+});
+
 module.exports = router;
